@@ -42,19 +42,22 @@ func (t *EthTask) Do(ctx context.Context, client *EthClient, priv string, nonce 
 
 	var rootErr error
 
-
 	_, rootErr = client.SendTx(ctx, priv, nonce, t.to, t.amount)
 
 	if rootErr != nil {
 		if strings.Contains(rootErr.Error(), "Invalid Transaction") {
-			logger.Warn(fmt.Sprintf("nonce error, %s", rootErr.Error()))
+			//logger.Warn(fmt.Sprintf("nonce error, %s", rootErr.Error()))
 			return tps.ErrWrongNonce
 		}
-
+		if strings.Contains(rootErr.Error(), "Transaction already seen") {
+			//logger.Warn(fmt.Sprintf("nonce error, %s", rootErr.Error()))
+			return tps.ErrTaskRetry
+		}
 		logger.Warn(fmt.Sprintf("faild sending, err: %s", rootErr.Error()))
 		if err := t.IncrementTryCount(); err != nil {
 			return errors.Wrap(rootErr, err.Error())
 		}
+		return tps.ErrWrongNonce
 		queue.Push(t)
 		return nil
 	}

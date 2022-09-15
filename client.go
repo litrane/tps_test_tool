@@ -2,21 +2,22 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/big"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/tak1827/blockchain-tps-test/tps"
 	"github.com/thetatoken/theta/common"
 	"github.com/thetatoken/theta/common/hexutil"
+	"github.com/thetatoken/theta/crypto"
 	"github.com/thetatoken/theta/ledger/types"
 	"github.com/thetatoken/theta/rpc"
 	"github.com/ybbus/jsonrpc"
 
-	"github.com/thetatoken/theta/cmd/thetacli/cmd/tx"
 	"github.com/thetatoken/theta/core"
 	"github.com/thetatoken/thetasubchain/eth/ethclient"
 )
@@ -178,7 +179,7 @@ func (c *EthClient) getGasPriceSuggestion(ctx context.Context) big.Int {
 
 // sends transaction to the network
 func (c *EthClient) SendTx(ctx context.Context, privHex string, nonce uint64, to string, value int64) (common.Hash, error) {
-	nonce, _ = c.client.PendingNonceAt(context.Background(), common.HexToAddress(privHex))
+
 	// signedtx, err := c.signTransaciton(ctx, privHex, nonce, to, value)
 
 	// if err != nil {
@@ -189,18 +190,35 @@ func (c *EthClient) SendTx(ctx context.Context, privHex string, nonce uint64, to
 
 	// }
 	// fmt.Println("transaction sent. txid: ", signedtx.Hash().Hex(), "nonce: ", nonce)
-	wallet, address, err := tx.SoftWalletUnlock("/home/dd/.thetacli", "2E833968E5bB786Ae419c4d13189fB081Cc43bab", "qwertyuiop")
+	//wallet, address, err := tx.SoftWalletUnlock("/home/dd/.thetacli", "2E833968E5bB786Ae419c4d13189fB081Cc43bab", "qwertyuiop")
+	privateKey, err := crypto.HexToECDSA(privHex)
+	pri, err := hex.DecodeString(privHex)
+	thetaPrivateKey, err := crypto.PrivateKeyFromBytes(pri)
+	// privateKey, err := crypto.HexToECDSA("2dad160420b1e9b6fc152cd691a686a7080a0cee41b98754597a2ce57cc5dab1")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+
+	fromAddress := pubkeyToAddress(*publicKeyECDSA)
+	nonce, _ = c.client.PendingNonceAt(context.Background(), fromAddress)
 	theta := big.NewInt(0)
 	tfuel := big.NewInt(1)
 	fee := big.NewInt(3e17)
 	inputs := []types.TxInput{{
-		Address: address,
+		Address: fromAddress,
 		Coins: types.Coins{
 			TFuelWei: new(big.Int).Add(tfuel, fee),
 			ThetaWei: theta,
 		},
 		Sequence: uint64(nonce + 1),
 	}}
+	//fmt.Println("receive", nonce+1)
 	outputs := []types.TxOutput{{
 		Address: common.HexToAddress("9F1233798E905E173560071255140b4A8aBd3Ec6"),
 		Coins: types.Coins{
@@ -216,12 +234,11 @@ func (c *EthClient) SendTx(ctx context.Context, privHex string, nonce uint64, to
 		Inputs:  inputs,
 		Outputs: outputs,
 	}
-
-	sig, err := wallet.Sign(address, sendTx.SignBytes("privatenet"))
+	sig, err := thetaPrivateKey.Sign(sendTx.SignBytes("privatenet"))
 	if err != nil {
 		log.Fatalln("Failed to sign transaction: %v\n", err)
 	}
-	sendTx.SetSignature(address, sig)
+	sendTx.SetSignature(fromAddress, sig)
 
 	raw, err := types.TxToBytes(sendTx)
 	if err != nil {
@@ -230,7 +247,7 @@ func (c *EthClient) SendTx(ctx context.Context, privHex string, nonce uint64, to
 	signedTx := hex.EncodeToString(raw)
 	var res *jsonrpc.RPCResponse
 	res, err = c.rpcClient.Call("theta.BroadcastRawTransactionAsync", rpc.BroadcastRawTransactionArgs{TxBytes: signedTx})
-
+	time.Sleep(10 * time.Millisecond)
 	if err != nil {
 		return common.BytesToHash(nil), err
 		log.Fatalln("Failed to broadcast transaction: %v\n", err)
@@ -250,7 +267,7 @@ func (c *EthClient) SendTx(ctx context.Context, privHex string, nonce uint64, to
 		return common.BytesToHash(formatted), err
 		log.Fatalln("Failed to parse server response: %v\n", err)
 	}
-	fmt.Printf("Successfully broadcasted transaction:\n%s\n", formatted)
+	//fmt.Printf("Successfully broadcasted transaction:\n%s\n", formatted)
 
 	return common.BytesToHash(formatted), err
 }

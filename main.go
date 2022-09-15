@@ -20,8 +20,8 @@ var (
 	Timeout          = 15 * time.Second
 	MaxConcurrency   = runtime.NumCPU()
 	mesuringDuration = 60 * time.Second //执行数据时间
-	queueSize        = 300              //队列大小
-	concurrency      = 1                //并发数量
+	queueSize        = 20               //队列大小
+	concurrency      = 5                //并发数量
 	queue            = tps.NewQueue(queueSize)
 	closing          uint32
 	tpsClosing       uint32
@@ -29,13 +29,18 @@ var (
 	logLevel         = tps.WARN_LEVEL // INFO_LEVEL, WARN_LEVEL, FATAL_LEVEL
 	logger           = tps.NewLogger(logLevel)
 	privs            = []string{
-		"2E833968E5bB786Ae419c4d13189fB081Cc43bab",
+		"93a90ea508331dfdf27fb79757d4250b4e84954927ba0073cd67454ac432c737",
+		"1111111111111111111111111111111111111111111111111111111111111111",
+		"4444444444444444444444444444444444444444444444444444444444444444",
+		"7777777777777777777777777777777777777777777777777777777777777777",
+		"8888888888888888888888888888888888888888888888888888888888888888",
 	}
 
 	model = ERC721 //压测类型
 
 	addr_priv     = make(map[string]string, len(privs))
 	erc721address = "0x0000000000000000000000000000000000000009"
+	client        EthClient
 )
 
 func main() {
@@ -72,7 +77,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("err NewClient: ", err)
 	}
-
+	//fmt.Println(client.CountTx(context.Background(), 3847))
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
